@@ -7,18 +7,19 @@
 
 #import "QCloudFCUUID.h"
 #import "QCloudUICKeyChainStore.h"
-
-
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#endif
 @implementation QCloudFCUUID
 
 
 NSString *const QCloudFCUUIDsOfUserDevicesDidChangeNotification = @"QCloudFCUUIDsOfUserDevicesDidChangeNotification";
 
 
-NSString *const _uuidForInstallationKey = @"fc_uuidForInstallation";
-NSString *const _uuidForDeviceKey = @"fc_uuidForDevice";
-NSString *const _uuidsOfUserDevicesKey = @"fc_uuidsOfUserDevices";
-NSString *const _uuidsOfUserDevicesToggleKey = @"fc_uuidsOfUserDevicesToggle";
+static NSString *const _uuidForInstallationKey = @"fc_uuidForInstallation";
+static NSString *const _uuidForDeviceKey = @"fc_uuidForDevice";
+static NSString *const _uuidsOfUserDevicesKey = @"fc_uuidsOfUserDevices";
+static NSString *const _uuidsOfUserDevicesToggleKey = @"fc_uuidsOfUserDevicesToggle";
 
 
 +(QCloudFCUUID *)sharedInstance
@@ -152,7 +153,12 @@ NSString *const _uuidsOfUserDevicesToggleKey = @"fc_uuidsOfUserDevicesToggle";
 -(NSString *)uuidForVendor
 {
     if( _uuidForVendor == nil ){
+#if TARGET_OS_IPHONE
         _uuidForVendor = [[[[[UIDevice currentDevice] identifierForVendor] UUIDString] lowercaseString] stringByReplacingOccurrencesOfString:@"-" withString:@""];
+        
+#elif TARGET_OS_MAC
+        _uuidForVendor = @"0000";
+#endif
     }
 
     return _uuidForVendor;

@@ -198,7 +198,7 @@ SDK里绝大部分的请求都要通过签名来鉴权。在前面初始化过�
     if (nil == error) {
         NSLog(@"Upload finished!");
         //获取可以用于以后下载的URL
-        NSStrung* downloadURL = result.url;
+       	NSString* downloadURL = result.url;
     }
   }];
 
@@ -239,7 +239,7 @@ request.filePath = @"填入文件在本地的URL";
 	if (nil == error) {
 			NSLog(@"Upload finished!");
 			//获取可以用于以后下载的URL
-			NSStrung* downloadURL = result.url;
+			NSString* downloadURL = result.url;
 	}
 }];
 
@@ -254,7 +254,7 @@ request.filePath = @"填入文件在本地的URL";
 |-------|-------|------------|-------|    
 |filePath|NSString*|是|上传的文件在本地的URL|
 |bizAttribute|NSString*|否|文件的自定义属性|
-|insertOnley|BOOL|否|同名文件覆盖选项，有效值：0 覆盖（删除已有的重名文件，存储新上传的文件）1 不覆盖（若已存在重名文件，则不做覆盖，返回“上传失败”; 若新上传文件sha值与已存在重名文件相同，返回成功）。默认为 1 不覆盖。|
+|insertOnly|BOOL|否|同名文件覆盖选项，有效值：0 覆盖（删除已有的重名文件，存储新上传的文件）1 不覆盖（若已存在重名文件，则不做覆盖，返回“上传失败”; 若新上传文件sha值与已存在重名文件相同，返回成功）。默认为 1 不覆盖。|
 |bucket|NSString*|是|COS上面的存储桶名|
 |directory|NSString*|否|在COS存储桶下的目录|
 |fileName|NSString*|是|在COS上面的文件名|
@@ -290,7 +290,7 @@ request.filePath = @"填入文件在本地的URL";
 |-------|-------|------------|-------|    
 |filePath|NSString*|是|上传的文件在本地的URL|
 |bizAttribute|NSString*|否|文件的自定义属性|
-|insertOnley|BOOL|否|同名文件覆盖选项，有效值：0 覆盖（删除已有的重名文件，存储新上传的文件）1 不覆盖（若已存在重名文件，则不做覆盖，返回“上传失败”; 若新上传文件sha值与已存在重名文件相同，返回成功）。默认为 1 不覆盖。|
+|insertOnly|BOOL|否|同名文件覆盖选项，有效值：0 覆盖（删除已有的重名文件，存储新上传的文件）1 不覆盖（若已存在重名文件，则不做覆盖，返回“上传失败”; 若新上传文件sha值与已存在重名文件相同，返回成功）。默认为 1 不覆盖。|
 |bucket|NSString*|是|COS上面的存储桶名|
 |directory|NSString*|否|在COS存储桶下的目录|
 |fileName|NSString*|是|在COS上面的文件名|

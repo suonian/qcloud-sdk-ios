@@ -27,9 +27,9 @@
 #import "QCloudCOSXMLService.h"
 #import "QCloudCOSXMLService+Configuration.h"
 #import "QCloudCOSXMLService+Private.h"
-#import "QCloudThreadSafeMutableDictionary.h"
-#import "QCLoudError.h"
-
+#import <QCloudCore/QCloudThreadSafeMutableDictionary.h>
+#import <QCloudCore/QCLoudError.h>
+#import "UIDevice+QCloudFCUUID.h"
 QCloudThreadSafeMutableDictionary* QCloudCOSXMLServiceCache()
 {
     static QCloudThreadSafeMutableDictionary* CloudcosxmlService = nil;
@@ -39,8 +39,8 @@ QCloudThreadSafeMutableDictionary* QCloudCOSXMLServiceCache()
     });
     return CloudcosxmlService;
 }
-
 @implementation QCloudCOSXMLService
+@synthesize sessionManager = _sessionManager;
 static QCloudCOSXMLService* COSXMLService = nil;
 
 
@@ -52,6 +52,25 @@ static QCloudCOSXMLService* COSXMLService = nil;
         }
         return COSXMLService;
     }
+}
+- (QCloudHTTPSessionManager*) sessionManager {
+    
+    @synchronized(self) {
+        if (self.configuration.backgroundEnable) {
+            if (self.configuration.backgroundIn4GEnable) {
+                return [QCloudHTTPSessionManager sessionManagerWithBackgroundIdentifier:self.configuration.backgroundIdentifier];
+            }else{
+                if (([QCloudNetEnv shareEnv].currentNetStatus == QCloudReachableViaWiFi)) {
+                      return [QCloudHTTPSessionManager sessionManagerWithBackgroundIdentifier:self.configuration.backgroundIdentifier];
+                }else{
+                    return [QCloudHTTPSessionManager shareClient];
+                }
+            }
+            
+        }
+    }
+    
+    return [QCloudHTTPSessionManager shareClient];
 }
 
 + (QCloudCOSXMLService*) registerDefaultCOSXMLWithConfiguration:(QCloudServiceConfiguration*)configuration
@@ -81,11 +100,11 @@ static QCloudCOSXMLService* COSXMLService = nil;
     [QCloudCOSXMLServiceCache() setObject:cosxmlService  forKey:key];
     return cosxmlService;
 }
-- (NSString*)getURLWithBucket:(NSString *)bucket object:(NSString *)object withAuthorization:(BOOL)withAuthorization {
+- (NSString*)getURLWithBucket:(NSString *)bucket object:(NSString *)object withAuthorization:(BOOL)withAuthorization regionName:(NSString*)regionName {
     NSParameterAssert(bucket);
     NSParameterAssert(object);
     __block NSMutableString* resultURL = [[NSMutableString alloc] init];
-    NSString* bucketURL = [[self.configuration.endpoint serverURLWithBucket:bucket appID:self.configuration.appID] absoluteString];
+    NSString* bucketURL = [[self.configuration.endpoint serverURLWithBucket:bucket appID:self.configuration.appID regionName:regionName] absoluteString];
     [resultURL appendString:bucketURL];
     [resultURL appendFormat:@"/%@",object];
     if (withAuthorization) {
@@ -111,6 +130,5 @@ static QCloudCOSXMLService* COSXMLService = nil;
         return YES;
     }
 }
-
 
 @end

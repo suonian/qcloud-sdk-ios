@@ -42,6 +42,9 @@
 
 - (NSURL*) serverURLLiteral
 {
+    if (!_serverURLLiteral) {
+        return nil;
+    }
     NSString* url = _serverURLLiteral.absoluteString;
     if ([url.lowercaseString hasPrefix:QCloudHTTPSScheme]) {
         url = [url substringFromIndex:QCloudHTTPSScheme.length];
@@ -56,8 +59,7 @@
     return [NSURL URLWithString:url];
 }
 
-- (NSURL*) serverURLWithBucket:(NSString *)bucket appID:(NSString *)appID
-{
+-(NSURL *)serverURLWithBucket:(NSString *)bucket appID:(NSString *)appID regionName:(NSString *)regionName{
     NSString* msg = @"请在子类中实现该方法，在父类中该方法不关心具体业务的拼装！！！";
     @throw [NSException exceptionWithName:QCloudErrorDomain reason:msg userInfo:@{NSLocalizedDescriptionKey:msg}];
 }
@@ -69,7 +71,6 @@
     endpoint.serviceName = self.serviceName;
     endpoint.regionName = self.regionName;
     endpoint.serverURLLiteral = _serverURLLiteral;
-    
     return endpoint;
 }
 @end

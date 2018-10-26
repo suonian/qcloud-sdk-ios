@@ -24,6 +24,10 @@
 #import "QCloudFileUtils.h"
 #import "QCloudFileOffsetBody.h"
 #import "QCloudRequestData.h"
+#import "QCloudService.h"
+#import "UIDevice+QCloudFCUUID.h"
+#import "QCloudThreadSafeMutableDictionary.h"
+#import "QCloudWeakProxy.h"
 NSString* TaskDataKey(int64_t identifier){
     return [NSString stringWithFormat:@"data-%lld", identifier];
 }
@@ -34,10 +38,18 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
  NSString* const kQCloudRestNetURLUsageNotification  = @"kQCloudRestNetURLUsageNotification";
 
 
-
+QCloudThreadSafeMutableDictionary* cloudBackGroundSessionManagersCache;
+QCloudThreadSafeMutableDictionary* QCloudBackgroundSessionManagerCache()
+{
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cloudBackGroundSessionManagersCache = [QCloudThreadSafeMutableDictionary new];
+    });
+    return cloudBackGroundSessionManagersCache;
+}
 
 @implementation NSDictionary(QCloudRestNetUsage)
-
 - (NSURL*) bdwt_RestNetCoreUsagedURL
 {
     return self[@"url"];
@@ -50,8 +62,7 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
 {
     NSMutableDictionary* _taskQueue;
 }
-@property (nonatomic, strong) NSOperationQueue* sessionTaskQueue;
-@property (nonatomic ,strong) NSURLSessionConfiguration* configuration;
+@property (nonatomic, strong) NSOperationQueue* sessionTaskQueue;;
 @property (nonatomic, strong) NSURLSession* session;
 @property (nonatomic, strong) dispatch_queue_t buildDataQueue;
 @property (nonatomic, strong) QCloudOperationQueue* operationQueue;
@@ -65,24 +76,43 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
     static QCloudHTTPSessionManager* client = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        client = [QCloudHTTPSessionManager new];
+        client = [[QCloudHTTPSessionManager alloc] initWithConfigruation:[NSURLSessionConfiguration defaultSessionConfiguration]];
         [QCloudNetEnv shareEnv];
     });
     return client;
 }
-- (instancetype) init
+
++(QCloudHTTPSessionManager *)sessionManagerWithBackgroundIdentifier:(NSString *)backgroundIdentifier{
+    QCloudHTTPSessionManager *sessionManager = nil;
+    for (NSString *backgroundIdentifier in cloudBackGroundSessionManagersCache.allKeys) {
+        return [cloudBackGroundSessionManagersCache objectForKey:backgroundIdentifier];
+    }
+    sessionManager = [[QCloudHTTPSessionManager alloc]initWithBackgroundSessionWithBackgroundIdentifier:backgroundIdentifier];
+    [QCloudBackgroundSessionManagerCache() setObject:sessionManager forKey:backgroundIdentifier];
+    return sessionManager;
+}
+- (instancetype) initWithConfigruation:(NSURLSessionConfiguration*)configuration
 {
     self = [super init];
     if (!self) {
         return self;
     }
     //for restful request-response using the default session configuration ,and the most import thing is that you must not set the timeout for session configuration
-    _configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
+    _configuration = configuration;
     _sessionTaskQueue = [[NSOperationQueue alloc] init];
     _session = [NSURLSession sessionWithConfiguration:_configuration delegate:self delegateQueue:_sessionTaskQueue];
     _buildDataQueue = dispatch_queue_create("com.tencent.qcloud.build.data", NULL);
     _taskQueue = [NSMutableDictionary new];
     _operationQueue = [QCloudOperationQueue new];
+    return self;
+}
+
+- (QCloudHTTPSessionManager *)initWithBackgroundSessionWithBackgroundIdentifier:(NSString *)backgroundIdentifier{
+    NSAssert(backgroundIdentifier, @"后台传输的标识符为nil，请检查是否设置了backgroundIdentifier");
+    NSURLSessionConfiguration* backgroundConfiguration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:backgroundIdentifier];
+    if (self = [self initWithConfigruation:backgroundConfiguration]) {
+        [QCloudNetEnv shareEnv];
+    }
     return self;
 }
 
@@ -160,9 +190,10 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
     return [self performRequest:httpRequst];
 }
 
-- (int) performRequest:(QCloudHTTPRequest *)request
+- (int)  performRequest:(QCloudHTTPRequest *)request
 {
     QCloudHTTPRequestOperation* operation = [[QCloudHTTPRequestOperation alloc] initWithRequest:request];
+    operation.sessionManager = self;
     [_operationQueue addOpreation:operation];
     return (int)request.requestID;
 }
@@ -171,11 +202,13 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
 - (void) URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didFinishCollectingMetrics:(NSURLSessionTaskMetrics *)metrics
 {
         QCloudURLSessionTaskData* taskData = [self taskDataForTask:task];
+//        NSAssert(taskData, @"无法获取缓存的TaskData，请检查主动Cache的地方");
         NSURLSessionTaskTransactionMetrics* networkMetrics = nil;
         for (NSURLSessionTaskTransactionMetrics* m in metrics.transactionMetrics) {
             if (m.resourceFetchType == NSURLSessionTaskMetricsResourceFetchTypeNetworkLoad) {
                 networkMetrics = m;
             } else if (m.resourceFetchType == NSURLSessionTaskMetricsResourceFetchTypeLocalCache){
+                
             }
         }
 
@@ -208,7 +241,6 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
     } else {
         completionHandler([taskData.httpRequest reciveResponse:response]);
     }
- 
 }
 - (void) URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didSendBodyData:(int64_t)bytesSent totalBytesSent:(int64_t)totalBytesSent totalBytesExpectedToSend:(int64_t)totalBytesExpectedToSend
 {
@@ -231,13 +263,17 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
         [taskData.httpRequest.benchMarkMan benginWithKey:kRNBenchmarkDownploadTime];
         [taskData.httpRequest.benchMarkMan benginWithKey:kRNBenchmarkResponse];
     }
-    [taskData appendData:data];
-    if (taskData.httpRequest) {
-        [taskData.httpRequest notifyDownloadProgressBytesDownload:(int64_t)data.length
-                                               totalBytesDownload:(int64_t)taskData.totalRecivedLength
-                                     totalBytesExpectedToDownload:(int64_t)[dataTask.response expectedContentLength]];
+    if ([@[@(400), @(403), @(404), @(405)] containsObject:@(taskData.response.statusCode)]) {
+        // should not write data or callback
+    } else {
+        [taskData appendData:data];
+        if (taskData.httpRequest) {
+            [taskData.httpRequest notifyDownloadProgressBytesDownload:(int64_t)data.length
+                                                   totalBytesDownload:(int64_t)taskData.totalRecivedLength
+                                         totalBytesExpectedToDownload:(int64_t)[dataTask.response expectedContentLength]];
+        }
+        [[QCloudNetProfile shareProfile] pointDownload:data.length];
     }
-    [[QCloudNetProfile shareProfile] pointDownload:data.length];
 }
 
 
@@ -389,6 +425,8 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
     }
     
     NSError* directError;
+    
+    NSURL* uploadFileURL = nil;
     if (httpRequest.requestData.directBody) {
         NSMutableURLRequest* mutableRequest = [transformRequest mutableCopy];
         id body = httpRequest.requestData.directBody;
@@ -405,6 +443,7 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
             [mutableRequest setValue:[@(fileSize) stringValue] forHTTPHeaderField:@"Content-Length"];
             NSInputStream* inputStream = [NSInputStream inputStreamWithURL:fileURL];
             [mutableRequest setHTTPBodyStream:inputStream];
+            uploadFileURL = fileURL;
         } else if ([body isKindOfClass:[QCloudFileOffsetBody class]]) {
             QCloudFileOffsetBody* fileBody = (QCloudFileOffsetBody*)body;
             if (![fileBody.fileURL isFileURL]) {
@@ -421,6 +460,7 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
                 [mutableRequest setValue:[@(fileBody.sliceLength) stringValue] forHTTPHeaderField:@"Content-Length"];
                 [handler closeFile];
                 [mutableRequest setHTTPBodyStream:inputstream];
+                uploadFileURL = [NSURL fileURLWithPath:tempFile];
             }
             
         } else {
@@ -444,15 +484,33 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
         [httpRequest onError:error];
         return;
     }
-
-    NSURLSessionDataTask* task = [[QCloudHTTPSessionManager shareClient].session dataTaskWithRequest:transformRequest];
-    taskData.httpRequest = httpRequest;
     
+    NSURLSessionDataTask* task = nil;
+    //如果是文件上传
+    if (uploadFileURL) {
+        task = [self.session uploadTaskWithRequest:transformRequest fromFile:uploadFileURL];
+    }else{
+        if (self.session.configuration.identifier) {
+            if (!transformRequest.HTTPBody) {
+                if ([[NSFileManager defaultManager] createFileAtPath:taskData.uploadTempFilePath contents:nil attributes:nil]) {
+                    task = [self.session uploadTaskWithRequest:transformRequest fromFile:[NSURL fileURLWithPath:taskData.uploadTempFilePath]];
+                }
+            }else{
+                [transformRequest.HTTPBody writeToFile:taskData.uploadTempFilePath options:0 error:nil];
+                task = [self.session uploadTaskWithRequest:transformRequest fromFile:[NSURL fileURLWithPath:taskData.uploadTempFilePath]];
+            }
+            
+        }else{
+        task = [self.session dataTaskWithRequest:transformRequest];
+        }
+    }
+    
+   
+    taskData.httpRequest = httpRequest;
     QCloudHTTPRetryHanlder* retryHandler =  httpRequest.retryPolicy;
     taskData.retryHandler = retryHandler;
     [self cacheTask:task data:taskData forSEQ:(int)httpRequest.requestID];
     [httpRequest.benchMarkMan benginWithKey:kRNBenchmarkOnlyNet];
-    
     @try {
         int length = [[urlRequest.allHTTPHeaderFields objectForKey:@"Content-Length"] intValue];
         [httpRequest.benchMarkMan directSetCost:length forKey:kRNBenchmarkSizeRequeqstBody];
@@ -463,4 +521,15 @@ NSString* TaskMapKey(NSURLSessionTask* task) {
     [task resume];
     [httpRequest.benchMarkMan benginWithKey:kRNBenchmarkUploadTime];
 }
+
+- (void)URLSessionDidFinishEventsForBackgroundURLSession:(NSURLSession *)session {
+    if (self.didFinishEventsForBackgroundURLSession) {
+        self.didFinishEventsForBackgroundURLSession();
+    }
+   
+}
+-(void)dealloc{
+    [cloudBackGroundSessionManagersCache removeObject:self];
+}
+
 @end

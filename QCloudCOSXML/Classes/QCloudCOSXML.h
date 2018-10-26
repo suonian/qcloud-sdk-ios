@@ -17,6 +17,7 @@
 #import "QCloudInitiateMultipartUploadRequest.h"
 #import "QCloudCOSTransferMangerService.h"
 #import "QCloudCOSXMLUploadObjectRequest.h"
+#import "QCloudCOSXMLDownloadObjectRequest.h"
 #import "QCloudUploadObjectResult.h"
 
 #import "QCloudPutObjectACLRequest.h"
@@ -29,6 +30,7 @@
 #import "QCloudAppendObjectRequest.h"
 #import "QCloudGetObjectRequest.h"
 #import "QCloudGetObjectRequest+Custom.h"
+#import "QCloudPutObjectRequest+Custom.h"
 /**
  简单复制对象的方法.
  

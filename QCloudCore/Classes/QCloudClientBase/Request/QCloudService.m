@@ -10,12 +10,14 @@
 #import "QCloudHTTPSessionManager.h"
 #import "QCloudServiceConfiguration_Private.h"
 #import "NSError+QCloudNetworking.h"
+
 @interface QCloudService ()
 {
     NSMutableDictionary* _signatureCache;
     dispatch_queue_t _writeReadQueue;
     NSMutableDictionary* _requestingSignatureFileds;
 }
+@property (nonatomic,strong)NSString *backgroundTransmitIdentifier;
 @end
 
 @implementation QCloudService
@@ -30,20 +32,22 @@
     if (!configuration.endpoint) {
         @throw [NSException exceptionWithName:kQCloudNetworkDomain reason:[NSString stringWithFormat:@"您没有配置EndPoint就使用了服务%@", self.class] userInfo:nil];
     }
-    if (!configuration.appID) {
-        @throw [NSException exceptionWithName:kQCloudNetworkDomain reason:[NSString stringWithFormat:@"您没有配置AppID就使用了服务%@", self.class] userInfo:nil];
+    if ([configuration.endpoint.serviceName  isEqualToString:@"myqcloud.com"]) {
+        if (!configuration.appID) {
+            @throw [NSException exceptionWithName:kQCloudNetworkDomain reason:[NSString stringWithFormat:@"您没有配置AppID就使用了服务%@", self.class] userInfo:nil];
+        }
     }
+    
     if (![configuration.signatureProvider conformsToProtocol:NSProtocolFromString(@"QCloudSignatureProvider")]) {
         @throw [NSException exceptionWithName:kQCloudNetworkDomain reason:[NSString stringWithFormat:@"您没有配置signatureProvider或者没有实现对应的方法就使用了服务%@", self.class] userInfo:nil];
     }
+    
+   
     _configuration = configuration;
     _signatureCache = [NSMutableDictionary new];
     _requestingSignatureFileds = [NSMutableDictionary new];
     _writeReadQueue = dispatch_queue_create("com.tencent.qcloud.service.lock", DISPATCH_QUEUE_CONCURRENT);
     return self;
-}
-- (QCloudHTTPSessionManager*) sessionManager {
-    return [QCloudHTTPSessionManager shareClient];
 }
 
 - (QCloudSignatureFields*) signatureFiledsForRequest:(QCloudBizHTTPRequest*)request
@@ -81,6 +85,10 @@
     });
 }
 
+- (QCloudHTTPSessionManager *)sessionManager {
+    return [QCloudHTTPSessionManager shareClient];
+}
+
 - (void) loadCOSV4AuthorizationForBiz:(QCloudBizHTTPRequest *)request urlRequest:(NSURLRequest *)urlrequest compelete:(QCloudHTTPAuthentationContinueBlock)cotinueBlock {
     NSAssert([self.configuration.signatureProvider respondsToSelector:@selector(signatureWithFields:request:urlRequest:compelete:)], @"您没有提供用于签名的委托者，请设置后再调用API");
     request.runOnService = self;
@@ -113,14 +121,15 @@
 }
 - (int) performRequest:(QCloudBizHTTPRequest*)httpRequst
 {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+     httpRequst.runOnService = self;
+     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
         NSError* error;
         [self fillCommonParamtersForRequest:httpRequst error:&error];
         if (error) {
             [httpRequst onError:error];
             return ;
         }
-        [[QCloudHTTPSessionManager shareClient] performRequest:httpRequst];
+        [self.sessionManager performRequest:httpRequst];
     });
 
     return (int)httpRequst.requestID;
@@ -128,6 +137,8 @@
 
 - (int) performRequest:(QCloudBizHTTPRequest *)httpRequst withFinishBlock:(QCloudRequestFinishBlock)block
 {
+    httpRequst.runOnService = self
+    ;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
         NSError* error;
         [self fillCommonParamtersForRequest:httpRequst error:&error];
@@ -135,7 +146,7 @@
             [httpRequst onError:error];
             return ;
         }
-        [[QCloudHTTPSessionManager shareClient] performRequest:httpRequst withFinishBlock:block];
+         [self.sessionManager performRequest:httpRequst];
     });
     return (int)httpRequst.requestID;
 }

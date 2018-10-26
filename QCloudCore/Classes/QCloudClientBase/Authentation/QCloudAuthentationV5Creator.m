@@ -15,13 +15,13 @@
 #import "NSString+QCloudSHA.h"
 #import <CommonCrypto/CommonDigest.h>
 #import "QCloudLogger.h"
-
+#import "QCloudURLHelper.h"
 @implementation NSDictionary(HeaderFilter)
 - (NSDictionary*)filteHeaders; {
     NSMutableDictionary* signedHeaders = [[NSMutableDictionary alloc] init];
-    __block  const NSArray* shouldSignedHeaderList = @[ @"Content-Length", @"Content-MD5",@"Host"];
+    __block  const NSMutableArray* shouldSignedHeaderList = @[ @"Content-Length", @"Content-MD5"];
     [self enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
-        //签名的Headers列表：x开头的(x-cos-之类的),host,content-length,content-MD5
+        //签名的Headers列表：x开头的(x-cos-之类的),content-length,content-MD5
         BOOL shouldSigned = NO;
         for (NSString* header in shouldSignedHeaderList) {
             if ([header isEqualToString:((NSString*)key)]) {
@@ -61,21 +61,23 @@
  */
 
 - (NSString*)qcloud_path {
-    NSString* path = self.path;
+    NSString* path = QCloudPercentEscapedStringFromString(self.path);
+    //absoluteString in NSURL is URLEncoded
     NSRange pathRange = [self.absoluteString rangeOfString:path];
     NSUInteger URLLength = self.absoluteString.length;
     if ( pathRange.location == NSNotFound ) {
-        return path;
+        return self.path;
     }
     NSUInteger pathLocation = pathRange.location + pathRange.length;
     if (pathLocation >= URLLength) {
-        return path;
+        return self.path;
     }
     if ( [self.absoluteString characterAtIndex:(pathLocation)] == '/' ) {
-        path = [path stringByAppendingString:@"/"];
+        path = [self.path stringByAppendingString:@"/"];
         return path;
     }
-    return path;
+   
+    return self.path;
 }
 
 @end
@@ -139,11 +141,11 @@
     AppendFormatString(headerFormat);
     
     NSString* formatStringSHA = [formatString qcloud_sha1];
-    
+    QCloudLogDebug(@"format string is %@",formatString);
     // step 3 计算StringToSign
     
     NSString* stringToSign = [NSString stringWithFormat:@"%@\n%@\n%@\n", @"sha1", signTime, formatStringSHA];
-    
+    QCloudLogDebug(@"StringToSign is %@",stringToSign);
     // step 4 计算签名
     
     

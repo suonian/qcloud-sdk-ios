@@ -54,6 +54,9 @@ NSString* const kQCloudLogExtension = @"log";
 @end
 
 @implementation QCloudLogger
+{
+    NSMutableArray* _loggerOutputs;
+}
 
 + (instancetype)sharedLogger
 {
@@ -85,15 +88,23 @@ NSString* const kQCloudLogExtension = @"log";
     if (!self) {
         return self;
     }
+    _loggerOutputs = [NSMutableArray new];
     _currentFileLogger = [[QCloudFileLogger alloc] initWithPath:[self avilableLogFilePath] maxSize:QCloudEachLogFileSize];
     _currentFileLogger.delegate = self;
+    [_loggerOutputs addObject:_currentFileLogger];
     _maxStoarageSize = 70*1024*1024;
     _keepDays = 3;
     //
+#if TARGET_OS_IPHONE
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:UIApplicationWillResignActiveNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:UIApplicationWillTerminateNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:UIApplicationDidEnterBackgroundNotification object:nil];
-    //
+#elif TARGET_OS_MAC
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:NSApplicationWillResignActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:NSApplicationWillTerminateNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tryCleanLogs) name:NSApplicationWillHideNotification object:nil];
+
+#endif
     return self;
 }
 
@@ -113,6 +124,9 @@ NSString* const kQCloudLogExtension = @"log";
 
 - (void) fileLoggerDidFull:(QCloudFileLogger *)logger
 {
+    if (logger != _currentFileLogger) {
+        return;
+    }
     NSString* nextLogPath = [self avilableLogFilePath];
     if (_currentFileLogger.isFull) {
         QCloudFileLogger * fileLogger =[[QCloudFileLogger alloc] initWithPath:nextLogPath maxSize:QCloudEachLogFileSize];
@@ -207,7 +221,22 @@ NSString* const kQCloudLogExtension = @"log";
         QCloudLogModel* model = CreateLog();
         NSLog(@"%@",[model debugDescription]);
     }
-    [self.currentFileLogger appendLog:CreateLog];
+    for (QCloudLoggerOutput* output in _loggerOutputs) {
+        [output appendLog:CreateLog];
+    }
     va_end(args);
+}
+
+- (void) addLogger:(QCloudLoggerOutput *)output
+{
+    if (!output) {
+        return;
+    }
+    [_loggerOutputs addObject:output];
+}
+
+- (void) removeLogger:(QCloudLoggerOutput *)output
+{
+    [_loggerOutputs removeObject:output];
 }
 @end

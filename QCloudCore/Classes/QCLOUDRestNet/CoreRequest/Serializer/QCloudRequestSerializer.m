@@ -5,11 +5,9 @@
 //  Created by tencent on 15/9/23.
 //  Copyright © 2015年 QCloudTernimalLab. All rights reserved.
 //
-
 #import "QCloudRequestSerializer.h"
 #import "QCloudRequestData.h"
 #import "NSHTTPCookie+QCloudNetworking.h"
-#import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import "QCloudReachability.h"
@@ -45,7 +43,7 @@ NSString* QCloudStrigngURLEncode(NSString *string , NSStringEncoding stringEncod
                                                                                                     NULL,
                                                                                                     (CFStringRef)string,
                                                                                                     NULL,
-                                                                                                    CFSTR(":/?#[]@!$ &'()*+,;=\"<>%{}|\\^~`"),
+                                                                                                    CFSTR(":/?#[]@!$ &'()*+,;=\"<>%{}|\\^`"),
                                                                                                     CFStringConvertNSStringEncodingToEncoding(stringEncoding)));
     if (escaped_value) {
         return escaped_value;
